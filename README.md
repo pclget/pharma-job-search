@@ -40,6 +40,312 @@ all config          parallel           (keep relevant)      job fit             
 - **Rolling data**: Merges new results into a master CSV/Excel file, preserving your review history
 - **Repost detection**: Tracks when jobs are reposted across sources
 
+## FAQ
+
+### Why You Can Use This Tool With Confidence
+
+<details>
+<summary><b>Does the tool store my data in the cloud or share it with anyone?</b></summary>
+
+Everything runs locally on your machine. Job data is saved to CSV/Excel files in the `data/` folder, and your config, resume profile, and API keys stay in `config.yaml` on disk. Nothing is sent to any third-party service except: (a) job board APIs to fetch listings, and (b) your chosen AI provider (Anthropic/OpenAI/Ollama) when you run evaluation. If you use Ollama, even AI inference is fully local — no data ever leaves your machine.
+
+</details>
+
+<details>
+<summary><b>Where are my API keys stored, and could they be accidentally committed to git?</b></summary>
+
+API keys go in `config.yaml`, which is listed in `.gitignore` and will never be committed to git. Alternatively, you can set them as environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) so they never touch the filesystem at all. The example config (`config.example.yaml`) contains only placeholders and is safe to commit.
+
+</details>
+
+<details>
+<summary><b>What happens if one of the job board scrapers fails mid-run — do I lose all results?</b></summary>
+
+No. Each scraper saves its results to the master CSV as soon as it completes (progressive save). If Indeed fails, LinkedIn, USAJobs, Adzuna, and Jooble results are still saved. The failed scraper logs an error and the rest continue unaffected. Partial results are always preserved.
+
+</details>
+
+<details>
+<summary><b>Can re-running a search overwrite or delete jobs I've already reviewed?</b></summary>
+
+No. The exporter uses a merge-on-save architecture: it loads the existing master CSV, merges new results, deduplicates, and saves back. Your existing jobs — including reviewed ones — are always preserved. No data is ever dropped during a merge.
+
+</details>
+
+<details>
+<summary><b>Will reviewed jobs ever get lost or re-shuffled out of the list?</b></summary>
+
+No. When duplicates are merged during dedup, reviewed jobs get a +1000 richness score boost — ensuring they always survive over any duplicate. Your review state is separately stored in `reviewed.json` and is restored after every merge, regardless of how many times you re-run the search.
+
+</details>
+
+<details>
+<summary><b>How does the tool handle duplicate job postings so I don't review the same job twice?</b></summary>
+
+Three layers of deduplication run on every search:
+1. **Exact URL match** — after stripping tracking parameters (utm_*, fbclid, etc.)
+2. **Fuzzy match** — normalized company + title + state, catches the same job with slightly different URLs
+3. **Cross-source match** — same title + similar company across different job boards
+
+When duplicates are found, the richest row (most data, longest description, salary info) survives. You see one clean entry per real job.
+
+</details>
+
+<details>
+<summary><b>If a job gets reposted under a new URL after I reviewed it, will it resurface?</b></summary>
+
+No. When you mark a job as reviewed, a fuzzy key (`company|title|state`) is written to `reviewed_fkeys.json`. On every future scrape, any new posting matching a reviewed fuzzy key is silently dropped before it can enter the master CSV — even if it has a completely different URL. Reposted jobs you have already handled will not resurface.
+
+</details>
+
+<details>
+<summary><b>How expensive is AI evaluation — could a large run accidentally cost a lot?</b></summary>
+
+Very cheap. Using Claude Haiku (the default), evaluation costs roughly **$0.003 per job** — 100 jobs ≈ $0.30, 1,000 jobs ≈ $3.00. Run `--eval-dry-run` before any evaluation to see an exact count and estimated cost before committing. Additionally, the rule-based pre-filter eliminates ~50% of jobs before any API call is made, so you only pay for jobs that pass the initial screen.
+
+</details>
+
+<details>
+<summary><b>What happens if the AI evaluation run is interrupted halfway through?</b></summary>
+
+Results are saved incrementally every 5 jobs during evaluation. If the run is interrupted (browser refresh, power loss, Ctrl+C), you keep all completed evaluations. Re-running evaluation automatically skips already-scored jobs, picking up exactly where it left off. No work is lost.
+
+</details>
+
+<details>
+<summary><b>Will the tool misclassify jobs I'm qualified for as "skip"?</b></summary>
+
+The pre-filter uses a rescue mechanism specifically to prevent this. If a job title matches a skip pattern (e.g., "HPLC Scientist") but also matches a rescue pattern (e.g., "qPCR", "gene therapy", "GLP"), it is **not** skipped — it proceeds to AI scoring. You can test your patterns with `--eval-prefilter-only` to see exactly which jobs would be skipped, and adjust rescue patterns in the dashboard Setup tab before they affect real evaluations.
+
+</details>
+
+---
+
+### How to Use the Tool
+
+<details>
+<summary><b>How do I get started for the first time?</b></summary>
+
+Install the tool, then open the dashboard — the Setup tab walks you through everything:
+
+```bash
+pip install git+https://github.com/BioTechNerd-Apache/pharma-job-search.git
+python job_search.py --web
+```
+
+In the Setup tab: choose an AI provider, upload your resume, and click "Run Setup Wizard." The wizard generates your entire config automatically. Then run your first search from the sidebar.
+
+> Prefer the terminal? See the [Installation Guide](docs/INSTALL_GUIDE.md) for step-by-step instructions.
+
+</details>
+
+<details>
+<summary><b>What does the setup wizard actually do, and what does it generate?</b></summary>
+
+The wizard reads your resume (PDF, DOCX, or TXT) and makes 3 AI calls to generate:
+
+1. **`data/resume_profile.json`** — a structured profile of your background used by the AI evaluator
+2. **Search config** (terms, filters, synonyms in `config.yaml`) — keywords tailored to your specialty
+3. **`data/evaluator_patterns.yaml`** — skip/rescue/boost patterns matched to your discipline
+
+Everything that would otherwise require manual configuration is generated in one step.
+
+</details>
+
+<details>
+<summary><b>How do I run a basic job search?</b></summary>
+
+```bash
+python job_search.py --days 1    # Jobs posted in the last 24 hours
+python job_search.py             # Default: last 7 days
+python job_search.py --days 14   # Last 2 weeks
+```
+
+You can also click "Run New Search" in the dashboard sidebar. Results are saved to `data/pharma_jobs.csv` and `data/pharma_jobs.xlsx`.
+
+</details>
+
+<details>
+<summary><b>How do I customize the search terms for my specific specialty?</b></summary>
+
+Edit `config.yaml` under `search.terms` and `search.synonyms` — or use the Setup tab in the dashboard. Synonym groups let you define one base term that expands into several searches automatically. For example, defining "cell therapy" as a synonym group can also search "CAR-T scientist", "gene therapy", and "CGT" without listing each separately.
+
+</details>
+
+<details>
+<summary><b>Which AI providers can I use for evaluation, and do I need a paid account?</b></summary>
+
+Three options:
+
+| Provider | Cost | Setup |
+|----------|------|-------|
+| **Ollama** | Free | Install from [ollama.com](https://ollama.com/download), run `ollama pull llama3.1:8b` |
+| **Anthropic (Claude)** | Paid | API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| **OpenAI (GPT)** | Paid | API key from [platform.openai.com](https://platform.openai.com/api-keys) |
+
+You can use different providers for the setup wizard vs. bulk evaluation — e.g., a powerful cloud model for the wizard, free Ollama for daily evaluation.
+
+</details>
+
+<details>
+<summary><b>How do I evaluate jobs without running a new scrape?</b></summary>
+
+```bash
+python job_search.py --evaluate-only    # Evaluate jobs already in the master CSV
+python job_search.py --eval-days 3      # Evaluate jobs from the last 3 days
+python job_search.py --eval-all         # Evaluate all unevaluated jobs ever
+```
+
+Evaluation and searching are fully independent. You can scrape once and evaluate multiple times with different settings.
+
+</details>
+
+<details>
+<summary><b>How do I see AI scores and reasoning in the dashboard?</b></summary>
+
+Open the **Evaluation Results** tab. Jobs are color-coded by fit score:
+- Green (70+) — strong fit
+- Yellow (55–69) — moderate fit
+- Orange (40–54) — weak fit
+- Red (<40) — poor fit
+
+Click any row to see the full reasoning, domain match, matching skills, and missing skills in a detail panel below the grid.
+
+</details>
+
+<details>
+<summary><b>How do I mark jobs as reviewed, and does that persist across sessions?</b></summary>
+
+In either the Job Listings or Evaluation Results tab, select rows using the checkboxes and click "Mark as Reviewed." The timestamp is saved to `reviewed.json` immediately and persists permanently across sessions. Reviewed jobs are protected from being overwritten or re-surfaced by future scrapes.
+
+</details>
+
+<details>
+<summary><b>How do I export my top-scoring jobs to a spreadsheet?</b></summary>
+
+```bash
+python job_search.py --eval-export results.csv --eval-min-score 60
+```
+
+This exports all jobs with a fit score >= 60 to a CSV. A master Excel file (`data/pharma_jobs.xlsx`) is also updated automatically after every search — you can open it directly without any export step.
+
+</details>
+
+<details>
+<summary><b>How do I test my filter patterns without making API calls?</b></summary>
+
+```bash
+python job_search.py --eval-prefilter-only
+```
+
+This runs only the rule-based Stage 1 pre-filter on all jobs in the master CSV, showing counts of skipped, passed, and boosted jobs — with zero API cost. Iterate on your patterns here before running full evaluation.
+
+</details>
+
+<details>
+<summary><b>How do I create a desktop shortcut to launch the tool?</b></summary>
+
+```bash
+python job_search.py --create-shortcut
+```
+
+This creates a platform-appropriate launcher on your Desktop:
+- **macOS**: `~/Desktop/Pharma Job Search.command`
+- **Windows**: `~/Desktop/Pharma Job Search.bat`
+- **Linux**: `~/Desktop/pharma-job-search.desktop`
+
+Double-clicking it starts the dashboard and opens your browser automatically.
+
+</details>
+
+<details>
+<summary><b>How do I fine-tune the AI scoring to better match my background?</b></summary>
+
+Edit `data/resume_profile.json` — specifically:
+- `strongest_fit_domains` / `moderate_fit_domains` / `skip_domains` — tells the AI which job types fit you
+- `never_claim` — skills you do NOT have (prevents false matches)
+- `core_technical_platforms` — instruments and techniques you know
+
+You can also edit pre-filter patterns in `data/evaluator_patterns.yaml` (or the dashboard Setup tab) to skip or boost specific role types before they reach the AI.
+
+</details>
+
+---
+
+### What Is the Advantage
+
+<details>
+<summary><b>Why search 5 job boards instead of just using Indeed or LinkedIn?</b></summary>
+
+Coverage varies significantly by job type. USAJobs is the only source for federal, NIH, and FDA positions. Adzuna and Jooble often surface roles from company career pages that aren't on Indeed or LinkedIn. In practice, a meaningful share of unique jobs appear on only one or two boards — searching all 5 ensures you don't miss roles that would otherwise be invisible.
+
+</details>
+
+<details>
+<summary><b>How is this different from setting up job alerts on each board individually?</b></summary>
+
+Job alerts send you raw, unfiltered emails — with duplicates across boards, noise from irrelevant roles, and no way to compare across sources. This tool aggregates all 5 sources into a single deduplicated list, filters to your discipline by title keyword, and AI-scores each job against your specific background. You see one ranked, clean view instead of five separate inboxes full of noise.
+
+</details>
+
+<details>
+<summary><b>What is the AI evaluation actually doing — is it just keyword matching?</b></summary>
+
+No. The AI (Claude Haiku by default) reads the **full job description** alongside your complete resume profile — including career history, technical platforms, regulatory experience, fit domains, and skills you explicitly do NOT have. It reasons about the match holistically and returns a fit score (0–100), a recommendation (apply / maybe / skip), and a written explanation of matching and missing skills. It understands context, not just keywords.
+
+</details>
+
+<details>
+<summary><b>How does the tool know what roles are a good fit for me?</b></summary>
+
+Your `data/resume_profile.json` is embedded in the AI system prompt for every evaluation. It includes your career history with key skills at each role, core technical platforms, regulatory framework, fit domains you want, and a `never_claim` list of skills you don't have — which prevents the AI from giving you false positive matches. The setup wizard generates this profile automatically from your resume.
+
+</details>
+
+<details>
+<summary><b>Why does the discipline filter only look at job titles, not descriptions?</b></summary>
+
+Job descriptions routinely mention many disciplines in boilerplate — for example, "we hire data scientists, research scientists, and engineers" might appear in a posting for a completely unrelated role. Filtering on descriptions produces large numbers of false positives. Filtering on title only is a deliberate design decision that makes the include/exclude filters accurate and predictable.
+
+</details>
+
+<details>
+<summary><b>How does the two-stage evaluation pipeline save API costs?</b></summary>
+
+Stage 1 is a free, rule-based pre-filter (regex patterns on title and description) that runs before any API call. It skips obvious mismatches — VP-level roles, QC technician roles, data scientist roles, and so on. In practice this eliminates roughly **50% of jobs** before the AI ever sees them, cutting your API costs roughly in half. Only jobs that pass the screen are sent to the AI.
+
+</details>
+
+<details>
+<summary><b>What is the pre-filter stage and why does it matter?</b></summary>
+
+The pre-filter (Stage 1) applies ~50 regex patterns on job titles and ~15 on descriptions to identify obvious non-matches at zero cost. This not only saves money — it also speeds up evaluation significantly, since the AI never wastes time reading a job you'd clearly skip. Run `--eval-prefilter-only` to test the pre-filter in isolation and tune your patterns before committing to full evaluation.
+
+</details>
+
+<details>
+<summary><b>What does the "rescue" pattern mechanism do?</b></summary>
+
+Rescue patterns prevent the pre-filter from over-rejecting borderline jobs. If a job title matches a skip pattern (e.g., "HPLC Scientist") but also contains a rescue keyword (e.g., "GLP", "gene therapy", "qPCR"), the skip is overridden and the job proceeds to AI scoring. This catches edge cases where a job title sounds like a mismatch but the actual role is relevant to you.
+
+</details>
+
+<details>
+<summary><b>What does a reposted date tell me about a job?</b></summary>
+
+When the same job appears under different URLs across boards or scrape runs, the duplicate posting dates are collected in the `reposted_date` column. A job that keeps being reposted is one the company hasn't been able to fill — it signals an **active, urgent opening** worth prioritizing. You can filter by reposted jobs in the dashboard sidebar.
+
+</details>
+
+<details>
+<summary><b>Can I use this tool for fields outside pharma/biotech?</b></summary>
+
+Yes. The pharma/biotech configuration is the default, but every aspect is configurable: search terms, discipline filters, pre-filter patterns, and the resume profile. Changing these four layers adapts the tool to any job search domain. The setup wizard also tailors everything to whatever resume you upload, so it reads your field automatically and generates domain-appropriate config.
+
+</details>
+
+---
+
 ## Architecture
 
 ```mermaid
