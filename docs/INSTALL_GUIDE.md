@@ -10,10 +10,11 @@ A step-by-step guide for installing the Pharma/Biotech Job Search Tool on **Wind
 2. [Installing Prerequisites](#2-installing-prerequisites)
 3. [Install the Tool](#3-install-the-tool)
 4. [Configure the Tool](#4-configure-the-tool)
-5. [Run Your First Search](#5-run-your-first-search)
-6. [Create a Desktop Shortcut (Optional)](#6-create-a-desktop-shortcut-optional)
-7. [Quick Reference Cheat Sheet](#7-quick-reference-cheat-sheet)
-8. [Troubleshooting](#8-troubleshooting)
+5. [Using Free AI — No API Key Required (Ollama)](#5-using-free-ai--no-api-key-required-ollama)
+6. [Run Your First Search](#6-run-your-first-search)
+7. [Create a Desktop Shortcut (Optional)](#7-create-a-desktop-shortcut-optional)
+8. [Quick Reference Cheat Sheet](#8-quick-reference-cheat-sheet)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -198,7 +199,7 @@ pharma-job-search --help
 python job_search.py --help
 ```
 
-You should see a help message listing available commands. If you see an error, check the [Troubleshooting](#8-troubleshooting) section.
+You should see a help message listing available commands. If you see an error, check the [Troubleshooting](#9-troubleshooting) section.
 
 ---
 
@@ -303,7 +304,176 @@ That's it. The wizard creates `config.yaml` and all data files — you don't nee
 
 ---
 
-## 5. Run Your First Search
+## 5. Using Free AI — No API Key Required (Ollama)
+
+The AI features (setup wizard + job scoring) normally require a paid API key from Anthropic or OpenAI. **Ollama is a free alternative** that runs an AI model directly on your own computer — no account, no credit card, no monthly bill, and no data ever leaves your machine.
+
+This section walks you through choosing the right model for your computer, installing Ollama, and connecting it to this tool.
+
+---
+
+### Step 1 — Check how much RAM your computer has
+
+The model you can run depends on how much memory (RAM) your computer has. Here is how to check:
+
+**On Mac:**
+1. Click the **Apple menu** () in the top-left corner of your screen
+2. Click **About This Mac**
+3. Look for the line that says **Memory** — for example, "16 GB"
+
+**On Windows:**
+1. Press the **Windows key**, type **"About your PC"**, and press Enter
+2. Look for **Installed RAM** — for example, "16.0 GB"
+
+Write down your RAM amount before moving to the next step.
+
+---
+
+### Step 2 — Pick a model for your computer
+
+Use this table to choose a model. Pick the **highest row your RAM meets**:
+
+| Your RAM | Recommended model | What to expect |
+|---|---|---|
+| **4 GB or less** | `phi3:mini` | Works, but slow. Basic job scoring only. |
+| **8 GB** | `llama3.1:8b` | Good quality. Recommended starting point. |
+| **16 GB** | `gemma3:12b` | Better reasoning. Noticeably more accurate scoring. |
+| **32 GB or more** | `gemma3:12b` | Same model, but runs faster with headroom to spare. |
+
+> **Not sure which to pick?** Start with `llama3.1:8b`. It works well on most modern laptops and is the model referenced throughout this guide.
+
+> **Apple Silicon Mac (M1, M2, M3, M4 chip)?** All models above run significantly faster on Apple Silicon than on older Intel Macs or Windows laptops with the same RAM. If you have an M-series Mac with 8 GB, `gemma3:12b` is worth trying.
+
+> **How to check your Mac chip**: Apple menu → About This Mac → look for "Apple M1" / "M2" / etc. under the chip or processor line. If it says "Intel", you have an Intel Mac.
+
+---
+
+### Step 3 — Install Ollama
+
+Ollama is installed like any normal application — no terminal required for this step.
+
+**Mac:**
+1. Go to [ollama.com/download](https://ollama.com/download)
+2. Click the **Download for macOS** button
+3. Open the downloaded file (`Ollama-darwin.zip`) — it will extract to an app called **Ollama**
+4. Drag **Ollama** into your **Applications** folder
+5. Open **Ollama** from your Applications folder (or Launchpad)
+6. A small llama icon will appear in your menu bar at the top of the screen — this means Ollama is running
+
+**Windows:**
+1. Go to [ollama.com/download](https://ollama.com/download)
+2. Click the **Download for Windows** button
+3. Run the downloaded installer (`OllamaSetup.exe`)
+4. Click through the installer (the defaults are fine)
+5. Ollama will start automatically. A small llama icon will appear in the system tray (bottom-right corner of your screen near the clock)
+
+> **Ollama must be running** any time you use the AI features of this tool. If you restart your computer, open Ollama again from your Applications folder (Mac) or Start menu (Windows) before running a search.
+
+---
+
+### Step 4 — Download your chosen model
+
+This is the only step that requires the terminal. You only need to do it **once**.
+
+**Open a terminal:**
+- **Mac**: Press **Cmd + Space**, type **Terminal**, and press Enter
+- **Windows**: Press the **Windows key**, type **Command Prompt**, and press Enter
+
+**Type the command for your chosen model** and press Enter:
+
+| Model | Command to type |
+|---|---|
+| `phi3:mini` (4 GB RAM) | `ollama pull phi3:mini` |
+| `llama3.1:8b` (8 GB RAM) | `ollama pull llama3.1:8b` |
+| `gemma3:12b` (16 GB RAM) | `ollama pull gemma3:12b` |
+
+Example output — you will see a progress bar while the model downloads:
+
+```
+pulling manifest
+pulling 970aa74c0a90... 100% ████████████ 4.7 GB
+verifying sha256 digest
+writing manifest
+success
+```
+
+The download is large (4–8 GB depending on the model). It may take several minutes on a slower connection. You only need to download it once — after that it is stored on your computer.
+
+> **Terminal tip for beginners**: In the terminal, you type a command and press **Enter** to run it. You cannot click — just type exactly what is shown and press Enter. When it is done, you will see a new line with a blinking cursor.
+
+---
+
+### Step 5 — Connect Ollama to this tool
+
+You can connect Ollama through the dashboard (easiest) or through the setup wizard.
+
+#### Option A: Through the dashboard (recommended)
+
+1. Launch the dashboard:
+
+   **If you used Method A (pip install):**
+   ```
+   pharma-job-search --web
+   ```
+
+   **If you used Method B (clone):**
+   ```
+   python job_search.py --web
+   ```
+
+2. Your browser opens to `http://localhost:8501`. Click the **Setup / Profile** tab at the top.
+3. Under **AI Provider**, click the dropdown and select **Ollama**.
+4. In the **Model** field, type the model name you downloaded — for example: `llama3.1:8b`
+5. Leave the **Ollama URL** field as-is (`http://localhost:11434`) — this is the default and does not need to change.
+6. Click **Save Settings**.
+
+That's it. The tool will now use your local Ollama model instead of a paid API.
+
+#### Option B: Through the terminal wizard
+
+If you prefer the terminal setup wizard, choose **Ollama** when it asks for an AI provider and enter your model name when prompted.
+
+---
+
+### Verifying it works
+
+To confirm Ollama is connected and working, go to the **Setup / Profile** tab in the dashboard and click **Test Connection**. You should see a green confirmation message. If you see a red error, check the troubleshooting steps below.
+
+---
+
+### Ollama troubleshooting
+
+**"Connection refused" or "Cannot connect to Ollama"**
+
+Ollama is not running. Open the Ollama app from your Applications folder (Mac) or Start menu (Windows) and wait for the llama icon to appear in the menu bar / system tray. Then try again.
+
+**The model runs very slowly**
+
+This is normal if you are running a large model on a computer with limited RAM. Try a smaller model:
+- Switch from `gemma3:12b` to `llama3.1:8b`
+- Switch from `llama3.1:8b` to `phi3:mini`
+
+Download the smaller model first (`ollama pull phi3:mini`), then update the model name in the dashboard Setup tab.
+
+**"model not found" error**
+
+You need to download the model first. Open a terminal and run `ollama pull llama3.1:8b` (or whichever model you chose). Then try again.
+
+**Mac: Ollama icon is not in the menu bar**
+
+Ollama may not have started. Open your Applications folder and double-click **Ollama** to launch it.
+
+**Windows: Ollama icon is not in the system tray**
+
+Click the **^** arrow in the bottom-right corner of your screen to show hidden tray icons. If you still don't see it, search for **Ollama** in the Start menu and open it.
+
+---
+
+> **Note**: You can use different AI providers for different tasks. For example, you could use Ollama (free) for daily bulk job scoring and Anthropic (paid) only for the one-time setup wizard that reads your resume. Configure each separately in the dashboard Setup tab under **Wizard AI Provider** and **Evaluation AI Provider**.
+
+---
+
+## 6. Run Your First Search
 
 ### From the dashboard (recommended)
 
@@ -340,7 +510,7 @@ This searches for jobs and then scores them against your resume using AI. Requir
 
 ---
 
-## 6. Create a Desktop Shortcut (Optional)
+## 7. Create a Desktop Shortcut (Optional)
 
 Create a shortcut on your Desktop that launches the dashboard with one click:
 
@@ -360,7 +530,7 @@ This creates:
 
 ---
 
-## 7. Quick Reference Cheat Sheet
+## 8. Quick Reference Cheat Sheet
 
 ### GUI path (recommended) — install, launch, done
 
@@ -402,7 +572,7 @@ pharma-job-search --web
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### "pip is not recognized" or "pip: command not found"
 
